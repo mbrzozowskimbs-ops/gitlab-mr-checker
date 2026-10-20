@@ -1,0 +1,12 @@
+dist/
+target/
+.idea/
+*.iml
+node_modules/
+*.xpi
+*.zip
+.DS_Store
+__pycache__/
+
+.env
+.env.*
