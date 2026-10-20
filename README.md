@@ -1,6 +1,7 @@
 # Gitlab MR Checker
 
-Rozszerzenie dla Firefoksa, które prosi o potwierdzenie utworzenia, zapisania edycji
+Rozszerzenie dla Firefoksa oraz Chrome i innych przeglądarek opartych na Chromium (np. Brave),
+które prosi o potwierdzenie utworzenia, zapisania edycji
 lub ręcznego merge merge requesta (MR) w GitLabie, gdy zaznaczono usunięcie brancha
 źródłowego lub squash. Działa lokalnie na wskazanym przez użytkownika serwerze GitLab,
 bez tokenów i wywołań API GitLaba.
@@ -8,30 +9,47 @@ bez tokenów i wywołań API GitLaba.
 **Automatic merge nie jest sprawdzany.** Dodatek pomija zarówno włączenie auto-merge,
 jak i późniejsze wykonanie merge przez serwer. Ręczny „Merge immediately” jest sprawdzany.
 
-Dostępna jest wersja Firefox. [Obsługa Chrome jest planowana](browsers/chrome/README.md).
+Wersja Firefox używa Manifest V2, a wersja dla Chromium Manifest V3 ([szczegóły](browsers/chrome/README.md)).
+Obie korzystają z tego samego kodu w `src/`.
 
 ## Szybki start
 
-Wymagane: **Firefox 142 lub nowszy** oraz **Node.js 18 lub nowszy**.
-Nie trzeba instalować zależności npm.
+Wymagane: **Node.js 18 lub nowszy** oraz **Firefox 142 lub nowszy** albo przeglądarka
+oparta na **Chromium 108 lub nowszym** (Chrome, Brave i inne). Nie trzeba instalować zależności npm.
 
-1. Pobierz repozytorium i otwórz terminal w jego katalogu głównym.
-2. Zbuduj rozszerzenie:
+Pobierz repozytorium, otwórz terminal w jego katalogu głównym i zbuduj rozszerzenie:
 
-   ```sh
-   node scripts/build.cjs firefox
-   ```
+```sh
+node scripts/build.cjs firefox   # wynik w dist/firefox/
+node scripts/build.cjs chrome    # wynik w dist/chrome/
+```
 
-3. W Firefoxie otwórz `about:debugging#/runtime/this-firefox`.
-4. Kliknij „Wczytaj tymczasowy dodatek” (Load Temporary Add-on) i wskaż
+### Firefox
+
+1. Otwórz `about:debugging#/runtime/this-firefox`.
+2. Kliknij „Wczytaj tymczasowy dodatek” (Load Temporary Add-on) i wskaż
    `dist/firefox/manifest.json`.
-5. W otwartej stronie ustawień wpisz adres serwera, np. `https://gitlab.example.com`,
+3. W otwartej stronie ustawień wpisz adres serwera, np. `https://gitlab.example.com`,
    i kliknij „Zapisz i włącz”.
-6. Zaakceptuj dostęp do wskazanej domeny i odśwież wszystkie otwarte karty GitLaba.
+4. Zaakceptuj dostęp do wskazanej domeny i odśwież wszystkie otwarte karty GitLaba.
 
 Ustawienia można ponownie otworzyć ikoną dodatku na pasku narzędzi lub przez opcje
 w `about:addons`. Tymczasowa instalacja znika po ponownym uruchomieniu Firefoksa.
 Stałą instalację opisuje sekcja [Pakowanie i podpisywanie](#pakowanie-i-podpisywanie).
+
+### Chrome, Brave i inne przeglądarki Chromium
+
+Wszystkie przeglądarki oparte na Chromium używają tej samej paczki `dist/chrome/`.
+
+1. Otwórz stronę rozszerzeń: `chrome://extensions` w Chrome, `brave://extensions` w Brave.
+2. Włącz „Tryb dewelopera” (Developer mode).
+3. Kliknij „Załaduj rozpakowane” (Load unpacked) i wskaż katalog `dist/chrome/`.
+4. W otwartej stronie ustawień wpisz adres serwera i kliknij „Zapisz i włącz”.
+5. Zaakceptuj dostęp do wskazanej domeny i odśwież wszystkie otwarte karty GitLaba.
+
+Ustawienia można ponownie otworzyć ikoną dodatku lub przez „Szczegóły” → „Opcje rozszerzenia”.
+Rozpakowane rozszerzenie zostaje po ponownym uruchomieniu przeglądarki.
+Po przebudowaniu kliknij „Odśwież” przy dodatku na stronie rozszerzeń i odśwież karty GitLaba.
 
 ## Działanie
 
@@ -81,14 +99,15 @@ Wszystkie polecenia uruchamiaj z katalogu głównego repozytorium.
 | --- | --- |
 | `node --test tests/*.test.cjs` | Testy automatyczne bez instalacji zależności. |
 | `node scripts/build.cjs firefox` | Budowanie plików rozszerzenia w `dist/firefox/`, bez testów i archiwum. |
+| `node scripts/build.cjs chrome` | Budowanie plików rozszerzenia w `dist/chrome/`, bez testów i archiwum. |
 | `mvn test` | Testy Node.js uruchamiane przez Maven. |
-| `mvn clean verify` | Usunięcie poprzednich wyników, testy, budowanie i utworzenie ZIP-a. |
-| `mvn package` | Testy, budowanie i utworzenie ZIP-a. |
-| `mvn package -DskipTests` | Budowanie i ZIP bez testów. |
+| `mvn clean verify` | Usunięcie poprzednich wyników, testy, budowanie i utworzenie ZIP-ów. |
+| `mvn package` | Testy, budowanie i utworzenie ZIP-ów. |
+| `mvn package -DskipTests` | Budowanie i ZIP-y bez testów. |
 | `mvn clean` | Usunięcie wygenerowanych katalogów `target/` i `dist/`. |
 
-Budowanie odtwarza `dist/firefox/`. Zmiany wprowadzaj w `src/` lub konfiguracji
-przeglądarki i buduj ponownie; własne zmiany w `dist/firefox/` zostaną nadpisane.
+Budowanie odtwarza `dist/<przeglądarka>/`. Zmiany wprowadzaj w `src/` lub konfiguracji
+przeglądarki i buduj ponownie; własne zmiany w `dist/` zostaną nadpisane.
 
 ### Maven i IntelliJ IDEA
 
@@ -110,11 +129,12 @@ mvn verify -Dnode.executable=/pełna/ścieżka/do/node
 
 ## Pakowanie i podpisywanie
 
-`mvn clean verify` tworzy `dist/firefox/` oraz archiwum
-`target/gitlab-mr-checker-1.4.0-firefox.zip`. Numer w nazwie pochodzi z `pom.xml`.
-ZIP zawiera `manifest.json` bezpośrednio w katalogu głównym, bez testów i dokumentacji.
+`mvn clean verify` tworzy `dist/firefox/` i `dist/chrome/` oraz archiwa
+`target/gitlab-mr-checker-1.5.0-firefox.zip` i `target/gitlab-mr-checker-1.5.0-chrome.zip`.
+Numer w nazwie pochodzi z `pom.xml`. Każdy ZIP zawiera `manifest.json` bezpośrednio
+w katalogu głównym, bez testów i dokumentacji.
 
-Przy budowaniu samym Node.js spakuj **zawartość** `dist/firefox/`, a nie cały katalog,
+Przy budowaniu samym Node.js spakuj **zawartość** `dist/firefox/` lub `dist/chrome/`, a nie cały katalog,
 aby uzyskać taki sam układ archiwum. Skrypt `build.cjs` nie tworzy ZIP-a ani XPI.
 
 Żadna z tych metod nie podpisuje dodatku. Do stałej instalacji w standardowym
@@ -122,12 +142,16 @@ Firefoxie wymagany jest podpis Mozilli. Paczkę można zgłosić jako niepublicz
 (unlisted) przez [panel deweloperski Mozilla Add-ons](https://addons.mozilla.org/developers/).
 Zmiana rozszerzenia archiwum ZIP na `.xpi` nie zastępuje podpisu.
 
+W przeglądarkach Chromium instalacja bez trybu dewelopera wymaga publikacji w Chrome Web Store
+(także jako niepubliczna); do sklepu przesyła się archiwum `-chrome.zip`, które sklep sam podpisuje.
+Brave i inne przeglądarki Chromium instalują dodatek stamtąd bez osobnej publikacji.
+
 ## Architektura
 
 ```text
 src/                  kod rozszerzenia, strona ustawień i ikony
-browsers/firefox/     manifest Firefoksa
-browsers/chrome/      opis planowanej obsługi Chrome
+browsers/firefox/     manifest Firefoksa (Manifest V2)
+browsers/chrome/      manifest Chromium (Manifest V3) i service worker
 scripts/              budowanie, konfiguracja ZIP-a i generowanie ikon
 tests/                testy Node.js
 docs/                 dokumentacja i podglądy
@@ -135,17 +159,21 @@ dist/                 wygenerowane pliki rozszerzenia (pomijane w Git)
 target/               wyniki Mavena, w tym ZIP (pomijane w Git)
 ```
 
-- `settings.js` waliduje adres serwera, a `options.js` obsługuje zapis konfiguracji
-  i uzyskanie uprawnienia do domeny.
+- `settings.js` waliduje adres serwera i udostępnia `extensionApi` (`browser` w Firefoksie,
+  `chrome` w Chromium), a `options.js` obsługuje zapis konfiguracji i uzyskanie uprawnienia do domeny.
 - `background.js` odtwarza konfigurację i rejestruje skrypty tylko dla wybranego
-  serwera przez `browser.contentScripts.register`.
+  serwera: w Firefoksie przez `contentScripts.register`, w Chromium przez
+  `scripting.registerContentScripts`. Chromium sam pamięta rejestrację, więc identyczna
+  nie jest wymieniana przy każdym uruchomieniu service workera.
+- `browsers/chrome/service-worker.js` ładuje `settings.js` i `background.js`,
+  bo Chromium przyjmuje jeden plik tła.
 - `guard.js` kontroluje zapis formularzy MR, a `merge-guard.js` ręczne akcje merge.
   Delegacja zdarzeń pozwala obsługiwać elementy dodawane przy nawigacji GitLaba
   bez pełnego przeładowania strony.
 - `dialog.js` udostępnia wspólne okno potwierdzenia oparte na `<dialog>` i Shadow DOM,
   aby odizolować jego style od strony GitLaba.
-- `scripts/build.cjs` kopiuje wspólny kod z `src/` i manifest wybranej przeglądarki.
-  Obecnie przyjmuje wyłącznie cel `firefox`.
+- `scripts/build.cjs` kopiuje wspólny kod z `src/` i pliki z `browsers/<przeglądarka>/`
+  (bez `README.md`). Przyjmuje cele `firefox` i `chrome`.
 
 ## Weryfikacja
 
@@ -156,7 +184,7 @@ node --test tests/*.test.cjs
 Testy obejmują konfigurację, uprawnienia, rejestrację skryptów, zapis formularzy,
 ręczny merge i wyjątek dla auto-merge oraz zawartość budowanego rozszerzenia.
 Logika formularzy i merge jest testowana z atrapami DOM i zdarzeń.
-Testy nie zastępują instalacji w Firefoxie i próby na docelowej wersji GitLaba.
+Testy nie zastępują instalacji w przeglądarce i próby na docelowej wersji GitLaba.
 
 Przed użyciem sprawdź na testowym MR:
 
@@ -189,10 +217,11 @@ rozszerzenia. Zgodność trzeba potwierdzić na docelowej instancji GitLaba.
 
 ## Wprowadzanie zmian
 
-- Edytuj źródła w `src/` i manifest w `browsers/firefox/`; nie edytuj wyników budowania.
+- Edytuj źródła w `src/` i pliki przeglądarek w `browsers/`; nie edytuj wyników budowania.
+  Różnice API przeglądarek trzymaj w `background.js` i `extensionApi`, bez kopiowania logiki MR.
 - Przy zmianie zachowania zaktualizuj odpowiednie testy w `tests/` i opis w README.
 - Uruchom testy i zbuduj rozszerzenie, a zmiany obsługi GitLaba sprawdź też na testowym MR.
-- Przy wydaniu utrzymuj zgodność wersji w `pom.xml` i `browsers/firefox/manifest.json`.
+- Przy wydaniu utrzymuj zgodność wersji w `pom.xml` i obu manifestach (sprawdza to test budowania).
 - Ikona źródłowa znajduje się w `src/icons/icon.svg`. PNG w rozmiarach 16, 32, 48, 96 i 128 px
   odtwarza `python3 scripts/render-icons.py` (wymagany Pillow). Gotowe PNG są w repozytorium,
   więc zwykłe budowanie nie wymaga Pythona ani Pillow.

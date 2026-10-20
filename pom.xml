@@ -6,7 +6,7 @@
 
     <groupId>pl.rubibubi</groupId>
     <artifactId>gitlab-mr-checker</artifactId>
-    <version>1.4.0</version>
+    <version>1.5.0</version>
     <packaging>pom</packaging>
     <name>Gitlab MR Checker</name>
     <description>Rozszerzenie przeglądarki sprawdzające opcje przy zapisie i ręcznym merge MR.</description>
@@ -61,6 +61,17 @@
                             </arguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>build-chrome</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <arguments>
+                                <argument>scripts/build.cjs</argument>
+                                <argument>chrome</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -70,6 +81,7 @@
                 <configuration>
                     <descriptors>
                         <descriptor>scripts/firefox-assembly.xml</descriptor>
+                        <descriptor>scripts/chrome-assembly.xml</descriptor>
                     </descriptors>
                 </configuration>
                 <executions>

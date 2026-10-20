@@ -1,7 +1,7 @@
 {
 	"manifest_version": 2,
 	"name": "Gitlab MR Checker",
-	"version": "1.4.0",
+	"version": "1.5.0",
 	"author": "Marek Brzozowski",
 	"description": "Sprawdza usuwanie brancha i squash przy zapisie i ręcznym merge MR. Nie obejmuje automatic merge. Autor: Marek Brzozowski.",
 	"browser_specific_settings": {
