@@ -1,216 +1,198 @@
 # Gitlab MR Checker
 
-Rozszerzenie pyta przed utworzeniem, zapisaniem edycji oraz ręcznym merge MR, jeśli zaznaczono
-usuwanie brancha źródłowego lub squash. Wyświetla tylko zaznaczone opcje.
-„Zapisz MR” / „Kontynuuj merge” pozwala kontynuować akcję.
+Rozszerzenie dla Firefoksa, które prosi o potwierdzenie utworzenia, zapisania edycji
+lub ręcznego merge merge requesta (MR) w GitLabie, gdy zaznaczono usunięcie brancha
+źródłowego lub squash. Działa lokalnie na wskazanym przez użytkownika serwerze GitLab,
+bez tokenów i wywołań API GitLaba.
+
+**Automatic merge nie jest sprawdzany.** Dodatek pomija zarówno włączenie auto-merge,
+jak i późniejsze wykonanie merge przez serwer. Ręczny „Merge immediately” jest sprawdzany.
+
+Dostępna jest wersja Firefox. [Obsługa Chrome jest planowana](browsers/chrome/README.md).
+
+## Szybki start
+
+Wymagane: **Firefox 142 lub nowszy** oraz **Node.js 18 lub nowszy**.
+Nie trzeba instalować zależności npm.
+
+1. Pobierz repozytorium i otwórz terminal w jego katalogu głównym.
+2. Zbuduj rozszerzenie:
+
+   ```sh
+   node scripts/build.cjs firefox
+   ```
+
+3. W Firefoxie otwórz `about:debugging#/runtime/this-firefox`.
+4. Kliknij „Wczytaj tymczasowy dodatek” (Load Temporary Add-on) i wskaż
+   `dist/firefox/manifest.json`.
+5. W otwartej stronie ustawień wpisz adres serwera, np. `https://gitlab.example.com`,
+   i kliknij „Zapisz i włącz”.
+6. Zaakceptuj dostęp do wskazanej domeny i odśwież wszystkie otwarte karty GitLaba.
+
+Ustawienia można ponownie otworzyć ikoną dodatku na pasku narzędzi lub przez opcje
+w `about:addons`. Tymczasowa instalacja znika po ponownym uruchomieniu Firefoksa.
+Stałą instalację opisuje sekcja [Pakowanie i podpisywanie](#pakowanie-i-podpisywanie).
+
+## Działanie
+
+Okno potwierdzenia wymienia zaznaczone opcje: usunięcie brancha źródłowego po merge
+oraz scalenie commitów (squash). Dodatek odczytuje stan checkboxów i nie zmienia ich wartości.
+
+| Akcja | Zachowanie |
+| --- | --- |
+| Utworzenie lub zapis edycji MR | Pytanie, jeśli zaznaczono co najmniej jedną z kontrolowanych opcji. |
+| Ręczny Merge, „Merge immediately” lub wariant „Merge now” dla merge train | Kontrola aktualnych checkboxów w panelu merge, także zaznaczonych i zablokowanych ustawieniami projektu. |
+| Rozpoznany przycisk ręcznego merge, ale brak odczytu opcji | Pytanie z ostrzeżeniem, aby sprawdzić opcje w panelu GitLaba. |
+| Brak zaznaczonych opcji przy poprawnym odczycie | Akcja przechodzi bez pytania. |
+| Włączenie lub wykonanie automatic merge | Bez kontroli i bez pytania. |
+
+„Zapisz MR” lub „Kontynuuj merge” wznawia pierwotną akcję.
 „Wróć do MR”, Esc lub kliknięcie tła zamyka okno bez wykonania akcji.
-Bez zaznaczonych opcji zapis odbywa się bez pytania. Dodatek nie zmienia checkboxów.
+Początkowy fokus jest na przycisku anulowania. Zmiana opcji podczas wyświetlania
+pytania powoduje ponowną kontrolę przed wznowieniem akcji.
 
-**Automatic merge nie jest sprawdzany.** Włączenie auto-merge jest pomijane bez pytania,
-podobnie jak późniejsze wykonanie merge przez serwer. Ręczny „Merge immediately” nadal jest sprawdzany.
+Podglądy na formularzu testowym: [okno potwierdzenia](docs/dialog-preview.png)
+i [ustawienia](docs/options-preview.png).
 
-Ochrona obejmuje ręczny przycisk Merge, „Merge immediately”
-i warianty „Merge now” dla merge train. Czyta aktualne checkboxy w panelu merge,
-także zaznaczone i zablokowane przez ustawienia projektu. Anuluj zatrzymuje kliknięcie
-przed obsługą przez GitLaba; OK pozwala na normalną obsługę.
-Jeśli przycisk jest rozpoznany, ale opcje nie są odczytane, pojawi się pytanie ostrzegające
-o braku odczytu. Ponowne kliknięcie Merge wywołuje ponowną kontrolę.
-Nie przechwytuje wykonania auto-merge przez serwer w późniejszym terminie.
+## Konfiguracja i prywatność
 
+- Podaj sam adres HTTPS serwera, bez ścieżki projektu, danych logowania, parametrów
+  i fragmentu URL. HTTP i niestandardowe porty nie są obsługiwane.
+- Obsługiwany jest jeden skonfigurowany serwer naraz. Dodatek nie zawiera firmowego adresu.
+- Manifest deklaruje `https://*/*` jako uprawnienie opcjonalne, aby umożliwić wybór
+  serwera. Dostęp jest przyznawany tylko do wskazanej domeny.
+- Bez konfiguracji lub zgody na dostęp ochrona pozostaje wyłączona.
+- Adres jest zapisywany w `storage.local`, bez synchronizacji przez konto.
+  Przy uruchomieniu dodatek odtwarza ochronę na podstawie ustawienia i uprawnienia.
+- Po poprawnej zmianie adresu poprzednie uprawnienie jest usuwane.
+  **Odśwież wszystkie otwarte karty GitLaba po konfiguracji lub zmianie serwera**:
+  wyrejestrowanie skryptu nie usuwa obsługi zdarzeń z już otwartej strony.
+- Dodatek nie zbiera ani nie przesyła danych, nie korzysta z tokenów ani cookies
+  i nie przechwytuje ruchu sieciowego. Lokalnie przechowuje wyłącznie adres serwera.
 
-Projekt ma wspólny kod rozszerzenia i osobne konfiguracje przeglądarek.
-Obecnie działa wersja Firefox; obsługa Chrome jest planowana.
+Odinstalowanie usuwa lokalne dane dodatku. Instalacja tymczasowa nie gwarantuje
+zachowania ustawień między sesjami.
 
-## Struktura projektu
+## Polecenia
 
-```text
-src/                  wspólny kod, strona ustawień i ikony
-browsers/firefox/     manifest Firefoksa
-browsers/chrome/      miejsce na przyszłą obsługę Chrome
-scripts/              budowanie rozszerzenia i generowanie ikon
-tests/                testy automatyczne
-docs/                 dokumentacja i podglądy
-dist/                 wynik budowania, pomijany w Git
-```
+Wszystkie polecenia uruchamiaj z katalogu głównego repozytorium.
 
-## Maven i IntelliJ IDEA
+| Polecenie | Opis |
+| --- | --- |
+| `node --test tests/*.test.cjs` | Testy automatyczne bez instalacji zależności. |
+| `node scripts/build.cjs firefox` | Budowanie plików rozszerzenia w `dist/firefox/`, bez testów i archiwum. |
+| `mvn test` | Testy Node.js uruchamiane przez Maven. |
+| `mvn clean verify` | Usunięcie poprzednich wyników, testy, budowanie i utworzenie ZIP-a. |
+| `mvn package` | Testy, budowanie i utworzenie ZIP-a. |
+| `mvn package -DskipTests` | Budowanie i ZIP bez testów. |
+| `mvn clean` | Usunięcie wygenerowanych katalogów `target/` i `dist/`. |
 
-W IntelliJ wybierz **File → Open**, wskaż `pom.xml` i otwórz go jako projekt.
+Budowanie odtwarza `dist/firefox/`. Zmiany wprowadzaj w `src/` lub konfiguracji
+przeglądarki i buduj ponownie; własne zmiany w `dist/firefox/` zostaną nadpisane.
+
+### Maven i IntelliJ IDEA
+
+Maven jest opcjonalny. Wymaga Maven 3.6.3 lub nowszego, JDK 8 lub nowszego
+oraz Node.js 18 lub nowszego dostępnego jako `node` w `PATH`.
+Przy pierwszym uruchomieniu pobiera wtyczki budowania.
+Projekt pozostaje rozszerzeniem JavaScript: Maven zarządza testami i pakowaniem,
+bez kompilacji Javy i tworzenia JAR-a.
+
+W IntelliJ wybierz **File → Open** i otwórz `pom.xml` jako projekt.
 Jeśli katalog jest już otwarty, kliknij `pom.xml` prawym przyciskiem i wybierz
 **Add as Maven Project**.
 
-Wymagane są Maven 3.6.3 lub nowszy, JDK 8 lub nowszy do uruchamiania Mavena
-oraz Node.js 18 lub nowszy dostępny jako `node` w `PATH`.
-Maven przy pierwszym uruchomieniu pobierze wtyczki budowania.
-Projekt pozostaje rozszerzeniem JavaScript; Maven zarządza testami i pakowaniem,
-bez kompilacji Javy i bez tworzenia JAR-a.
+Jeśli Maven uruchomiony z IntelliJ nie znajduje Node.js, wskaż plik wykonywalny:
 
 ```sh
-mvn clean verify
+mvn verify -Dnode.executable=/pełna/ścieżka/do/node
 ```
 
-Polecenie uruchamia testy Node.js, buduje `dist/firefox/` i tworzy
-`target/gitlab-mr-checker-1.4.0-firefox.zip`. Archiwum zawiera `manifest.json`
-w katalogu głównym i nadaje się do przekazania do podpisania przez Mozillę.
-Nie jest podpisane automatycznie.
+## Pakowanie i podpisywanie
 
-Pozostałe polecenia:
+`mvn clean verify` tworzy `dist/firefox/` oraz archiwum
+`target/gitlab-mr-checker-1.4.0-firefox.zip`. Numer w nazwie pochodzi z `pom.xml`.
+ZIP zawiera `manifest.json` bezpośrednio w katalogu głównym, bez testów i dokumentacji.
 
-```sh
-mvn test                    # Tylko testy
-mvn package                 # Testy, budowanie i ZIP
-mvn package -DskipTests      # Budowanie i ZIP bez testów
-mvn clean                   # Usuwa wygenerowane target/ i dist/
+Przy budowaniu samym Node.js spakuj **zawartość** `dist/firefox/`, a nie cały katalog,
+aby uzyskać taki sam układ archiwum. Skrypt `build.cjs` nie tworzy ZIP-a ani XPI.
+
+Żadna z tych metod nie podpisuje dodatku. Do stałej instalacji w standardowym
+Firefoxie wymagany jest podpis Mozilli. Paczkę można zgłosić jako niepubliczną
+(unlisted) przez [panel deweloperski Mozilla Add-ons](https://addons.mozilla.org/developers/).
+Zmiana rozszerzenia archiwum ZIP na `.xpi` nie zastępuje podpisu.
+
+## Architektura
+
+```text
+src/                  kod rozszerzenia, strona ustawień i ikony
+browsers/firefox/     manifest Firefoksa
+browsers/chrome/      opis planowanej obsługi Chrome
+scripts/              budowanie, konfiguracja ZIP-a i generowanie ikon
+tests/                testy Node.js
+docs/                 dokumentacja i podglądy
+dist/                 wygenerowane pliki rozszerzenia (pomijane w Git)
+target/               wyniki Mavena, w tym ZIP (pomijane w Git)
 ```
 
-Jeśli IntelliJ nie znajduje Node.js, ustaw ścieżkę jawnie:
-`mvn verify -Dnode.executable=/pełna/ścieżka/do/node`.
-Wersja w `pom.xml` i `browsers/firefox/manifest.json` powinna być zgodna
-przy przygotowywaniu kolejnego wydania.
-
-## Budowanie bez Mavena
-
-Wymagany Node.js 18 lub nowszy. Instalacja zależności nie jest potrzebna.
-Z katalogu głównego projektu uruchom:
-
-```sh
-node scripts/build.cjs firefox
-```
-
-Gotowe pliki znajdują się w `dist/firefox/`. Skrypt kopiuje kod z `src/`
-i manifest z `browsers/firefox/`, bez testów i dokumentacji.
-Ponowne budowanie odtwarza ten katalog; nie przechowuj w nim własnych zmian.
-Nie edytuj plików w `dist/` — zmiany wprowadzaj w źródłach i buduj ponownie.
-Aby przygotować archiwum do podpisania, spakuj zawartość `dist/firefox/`
-tak, aby `manifest.json` był bezpośrednio w katalogu głównym archiwum.
-Skrypt nie podpisuje dodatku i nie tworzy archiwum XPI ani ZIP.
-
-## Instalacja do testów (Firefox)
-
-Najpierw wykonaj budowanie opisane powyżej.
-
-1. Otwórz w Firefoxie `about:debugging#/runtime/this-firefox`.
-2. Kliknij „Wczytaj tymczasowy dodatek” (Load Temporary Add-on).
-3. Wskaż `dist/firefox/manifest.json`.
-4. W otwartej stronie ustawień wpisz adres serwera GitLab i kliknij „Zapisz i włącz”.
-5. Zaakceptuj dostęp do wskazanej domeny i odśwież otwarte karty GitLaba.
-
-Wersja 1.2.0 nie zawiera firmowego adresu. Przy pierwszej instalacji otwiera ustawienia.
-Można je również otworzyć ikoną dodatku lub przez opcje w `about:addons`.
-Podaj sam adres HTTPS, np. `https://gitlab.example.com`, bez ścieżki projektu i parametrów.
-Niestandardowe porty i HTTP nie są obsługiwane. Ustawienie jest zapisywane w `storage.local`,
-bez synchronizacji przez konto. Po restarcie ochrona jest odtwarzana z tego ustawienia.
-Odinstalowanie dodatku usuwa jego lokalne dane; instalacja tymczasowa nie gwarantuje ich zachowania.
-
-Manifest deklaruje `https://*/*` wyłącznie jako uprawnienie opcjonalne, aby użytkownik mógł
-wybrać dowolny serwer. Dodatek prosi o dostęp tylko do konkretnej wskazanej domeny.
-Bez konfiguracji lub bez zgody na dostęp ochrona pozostaje wyłączona.
-Zmiana adresu usuwa poprzednie uprawnienie. Po zmianie odśwież wszystkie otwarte karty:
-wyrejestrowanie skryptu nie usuwa jego obsługi zdarzeń z już otwartej strony.
-
-Tymczasowa instalacja znika po ponownym uruchomieniu Firefoksa.
-Do stałej instalacji w standardowym Firefoxie paczka wymaga podpisu Mozilli.
-Można zgłosić ją jako niepubliczną (unlisted) na https://addons.mozilla.org/developers/.
-Do podpisania prześlij nową paczkę `gitlab-mr-checker-1.4.0.xpi` lub `.zip`.
-Wersja 1.4.0 zmienia nazwę na „Gitlab MR Checker” i pomija włączanie automatic merge.
-Informacja o tym wyjątku jest widoczna bez rozwijania szczegółów, tuż pod konfiguracją,
-oraz w krótkim opisie manifestu. Identyfikator dodatku pozostaje ten sam, aby zachować aktualizację i ustawienia.
-Wersja 1.3.1 upraszcza ustawienia: konfiguracja na górze, pole i przycisk w jednym rzędzie,
-krótka informacja o prywatności oraz szczegóły w zwijanej sekcji. Układ domyślny,
-także z komunikatem zapisu, mieści się bez przewijania przy 1366×768, 1280×720 i 390×640
-w przeglądarce testowej. Podgląd: `docs/options-preview.png`.
-Wersja 1.3.0 zastępuje systemowy `confirm` własnym oknem: ikona dodatku, lista wybranych
-opcji i przyciski opisujące akcję. Okno używa modalnego `<dialog>` i izolowanych stylów
-w Shadow DOM. Początkowy fokus jest na anulowaniu; Esc zamyka okno.
-Po potwierdzeniu pierwotna akcja jest ponawiana jeden raz. Zmiana opcji w trakcie pytania
-wymaga ponownej kontroli. Przejście na inną stronę lub usunięcie przycisku zatrzymuje wznowienie.
-Podgląd: `docs/dialog-preview.png` (formularz testowy, nie rzeczywisty GitLab).
-Wersja 1.2.6 dodaje własną ikonę: białe gałęzie Git i zielony znak potwierdzenia
-na ciemnym tle. Ikona jest w manifeście, przycisku paska narzędzi i ustawieniach.
-Nie wykorzystuje logo GitLaba. Pliki PNG mają rozmiary 16, 32, 48, 96 i 128 px.
-Źródłowy rysunek jest w `src/icons/icon.svg`; `scripts/render-icons.py` odtwarza PNG przy użyciu Pillow
-(`python3 scripts/render-icons.py` z katalogu dodatku). Skrypt nie trafia do paczki instalacyjnej.
-Wersja 1.2.5 dodaje autora również do krótkiego opisu w manifeście. Firefox decyduje,
-czy wyświetli opis w oknie instalacji; rozszerzenie nie może dopisać tam własnej treści.
-Wersja 1.2.4 dodaje opis działania i autora (Marek Brzozowski) na ekranie pierwszej
-konfiguracji oraz pole `author` w manifeście. Ekran potwierdzenia instalacji jest kontrolowany
-przez Firefoksa; szczegółowy opis wyświetla strona ustawień otwierana po instalacji.
-Wersja 1.2.3 naprawia zapis konfiguracji ze strony ustawień otwartej w karcie:
-sprawdza identyfikator dodatku i dokładny URL strony ustawień zamiast odrzucać nadawców z karty.
-Wersja 1.2.1 deklaruje brak zbierania i przesyłania danych przez
-`browser_specific_settings.gecko.data_collection_permissions.required: ["none"]`.
-Wersja 1.2.2 wymaga Firefoksa 142 lub nowszego, aby uniknąć także ostrzeżenia
-walidatora o zgodności deklaracji z Androidem. Nie deklaruje obsługi Androida.
-Zawiera manifest, skrypt ochrony, skrypty konfiguracji i stronę ustawień, bez testów i dokumentacji.
-Starsze paczki 1.0.0 nadal zawierają firmową domenę — nie przesyłaj ich, jeśli chcesz jej nie ujawniać.
-Paczka wydania 1.4.0 nosi nazwę `gitlab-mr-checker-1.4.0.xpi` (nie jest przechowywana w źródłach) — to archiwum ZIP
-z rozszerzeniem `.xpi`, również niepodpisane. Można wskazać je przy wczytywaniu
-tymczasowego dodatku w `about:debugging`. Sama zmiana rozszerzenia pliku nie zastępuje
-podpisu Mozilli wymaganego przy stałej instalacji w standardowym Firefoxie.
+- `settings.js` waliduje adres serwera, a `options.js` obsługuje zapis konfiguracji
+  i uzyskanie uprawnienia do domeny.
+- `background.js` odtwarza konfigurację i rejestruje skrypty tylko dla wybranego
+  serwera przez `browser.contentScripts.register`.
+- `guard.js` kontroluje zapis formularzy MR, a `merge-guard.js` ręczne akcje merge.
+  Delegacja zdarzeń pozwala obsługiwać elementy dodawane przy nawigacji GitLaba
+  bez pełnego przeładowania strony.
+- `dialog.js` udostępnia wspólne okno potwierdzenia oparte na `<dialog>` i Shadow DOM,
+  aby odizolować jego style od strony GitLaba.
+- `scripts/build.cjs` kopiuje wspólny kod z `src/` i manifest wybranej przeglądarki.
+  Obecnie przyjmuje wyłącznie cel `firefox`.
 
 ## Weryfikacja
-
-Testy automatyczne bez instalacji zależności (Node.js 18+), z katalogu repozytorium:
 
 ```sh
 node --test tests/*.test.cjs
 ```
 
-Testy uruchamiają skrypt w izolowanym środowisku z atrapą formularza i zdarzeń.
-Nie zastępują testu integracji z Waszą wersją GitLaba.
+Testy obejmują konfigurację, uprawnienia, rejestrację skryptów, zapis formularzy,
+ręczny merge i wyjątek dla auto-merge oraz zawartość budowanego rozszerzenia.
+Logika formularzy i merge jest testowana z atrapami DOM i zdarzeń.
+Testy nie zastępują instalacji w Firefoxie i próby na docelowej wersji GitLaba.
 
-Sprawdzono też skrypt na rzeczywistym DOM w przeglądarce testowej: anulowanie kliknięcia,
-akceptacja bez podwójnego pytania, anulowanie `requestSubmit()` oraz zapis bez zaznaczenia.
-To sprawdzenie skryptu, nie instalacji rozszerzenia w Firefoxie ani rzeczywistego GitLaba.
-Obsługę merge sprawdzono również na testowym DOM: anulowanie, akceptacja, zaznaczone pole
-disabled, ignorowanie rebase, niezaznaczone pola i opcja Merge immediately poza panelem (portal).
+Przed użyciem sprawdź na testowym MR:
 
-Przed poleganiem na dodatku wykonaj próbę na testowym MR:
+1. Utworzenie i edycję MR bez opcji, z każdą osobno i z obiema.
+   Pytanie powinno wymieniać tylko zaznaczone opcje.
+2. Anulowanie: MR nie powstaje lub zmiany nie zapisują się, a formularz i checkboxy pozostają.
+3. Potwierdzenie: pojedyncze pytanie i pojedynczy zapis.
+4. Zapis klawiaturą oraz po nawigacji bez pełnego odświeżenia strony.
+   Komentarze i inne formularze nie powinny wywoływać pytania.
+5. Ręczny Merge z każdą opcją, obiema oraz żadną, także gdy zaznaczone pole jest zablokowane.
+   Anulowanie powinno pozostawić MR otwarty. Sprawdź też aktywację klawiaturą.
+6. Brak pytania przy włączaniu auto-merge oraz pytanie dla „Merge immediately”,
+   gdy zaznaczono kontrolowaną opcję.
 
-1. Bez opcji: utworzenie MR nie powinno wywołać pytania.
-2. Każda opcja osobno i obie: komunikat powinien wymieniać zaznaczone opcje.
-3. Anuluj: MR nie powstaje / zmiany nie zapisują się; formularz i checkboxy pozostają.
-4. OK: pojedynczy komunikat i pojedynczy zapis.
-5. Powtórz na edycji MR, także z opcją zaznaczoną już przy otwarciu strony.
-6. Powtórz zapis klawiaturą i po przejściu do formularza bez pełnego odświeżenia strony.
-7. Sprawdź, że komentarze oraz inne formularze nie wywołują pytania.
-8. Na testowym MR sprawdź Merge z każdą opcją osobno, obiema oraz żadną.
-9. Przy zaznaczonych opcjach wybierz Anuluj: MR powinien nadal być otwarty.
-10. Sprawdź aktywację ręcznego Merge klawiaturą. Włączenie auto-merge nie powinno wyświetlać pytania.
-11. OK wykonaj wyłącznie na MR, który rzeczywiście ma zostać zmergowany.
+Potwierdzaj merge wyłącznie na MR przeznaczonym do scalenia.
 
-## Zakres i ograniczenia
+## Ograniczenia
 
-Skrypt działa lokalnie. Nie wysyła danych, nie używa API GitLaba, tokenów ani cookies.
-Magazyn `storage.local` zawiera wyłącznie skonfigurowany adres serwera.
-Nie wymaga bibliotek, procesu budowania ani uprawnień do przechwytywania sieci.
-Używa własnego okna potwierdzenia w języku polskim, z listą opcji i ikoną dodatku.
-Wersję 1.3.0 sprawdzono na formularzu testowym w przeglądarce: anulowanie i akceptacja zapisu,
-zapis przez `requestSubmit()`, anulowanie i akceptacja merge oraz zamknięcie przez Esc.
-Nowy mechanizm wymaga ponownego sprawdzenia na Waszej wersji GitLaba (wznowienie kliknięcia).
-
-Rozpoznaje formularz po adresie akcji zakończonym `/merge_requests` lub `/merge_requests/<numer>`
-i checkboxy po nazwach `merge_request[force_remove_source_branch]`,
-`merge_request[remove_source_branch]` oraz `merge_request[squash]`.
-To założenia wymagające potwierdzenia na rzeczywistym GitLabie — dostępny był screenshot,
-bez HTML formularza. Zmiana nazw pól lub mechanizmu zapisu w GitLabie może wymagać aktualizacji.
-
-Obejmuje kliknięcia przycisków submit i zdarzenia submit (również klawiaturę).
-Nie przechwytuje operacji przez API/CLI ani zapisów omijających obsługiwane zdarzenia,
+Dodatek jest pomocą przy pracy w interfejsie, a nie regułą wymuszaną przez serwer.
+Nie obejmuje API/CLI, automatic merge ani zapisów omijających obsługiwane zdarzenia,
 np. bezpośredniego `form.submit()`.
-Delegacja obsługi zdarzeń obejmuje formularze dodane dynamicznie.
-To pomoc przy pracy w UI, a nie zabezpieczenie wymuszane po stronie serwera.
 
-Selektory panelu merge oparto na publicznym kodzie GitLaba:
-[merge_widget.vue](https://github.com/gitlabhq/gitlabhq/blob/master/app/assets/javascripts/vue_merge_request_widget/components/merge_widget.vue)
-i [squash_before_merge.vue](https://github.com/gitlabhq/gitlabhq/blob/master/app/assets/javascripts/vue_merge_request_widget/components/states/squash_before_merge.vue).
-Starsze wersje obsługuje także klasa `.accept-merge-request`. Nie przetestowano tego jeszcze
-na Waszej instancji. Inne selektory przycisku lub niestandardowe sposoby merge mogą ominąć ochronę.
+Rozpoznawanie formularzy opiera się na adresie akcji zakończonym `/merge_requests`
+lub `/merge_requests/<numer>` i nazwach pól `merge_request[force_remove_source_branch]`,
+`merge_request[remove_source_branch]` oraz `merge_request[squash]`.
+Ręczny merge jest rozpoznawany po selektorach przycisków i panelu w `src/merge-guard.js`,
+a auto-merge po etykiecie lub zaznaczonym polu `auto_merge` / `merge_when_pipeline_succeeds`.
+Zmiany DOM, nazw pól, tłumaczeń lub mechanizmu zapisu GitLaba mogą wymagać aktualizacji
+rozszerzenia. Zgodność trzeba potwierdzić na docelowej instancji GitLaba.
 
-Auto-merge rozpoznajemy po etykiecie przycisku (np. „Set to auto-merge”, „Merge when pipeline succeeds”,
-„Scal automatycznie”) lub zaznaczonym polu `auto_merge` / `merge_when_pipeline_succeeds` w panelu.
-Inne tłumaczenia lub zmienione nazwy kontrolek mogą wymagać uzupełnienia rozpoznawania.
-W przeglądarce testowej sprawdzono brak pytania dla auto-merge i zachowanie pytania dla Merge immediately.
+## Wprowadzanie zmian
 
-Dokumentacja: [content scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts),
-[podpisywanie](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/).
+- Edytuj źródła w `src/` i manifest w `browsers/firefox/`; nie edytuj wyników budowania.
+- Przy zmianie zachowania zaktualizuj odpowiednie testy w `tests/` i opis w README.
+- Uruchom testy i zbuduj rozszerzenie, a zmiany obsługi GitLaba sprawdź też na testowym MR.
+- Przy wydaniu utrzymuj zgodność wersji w `pom.xml` i `browsers/firefox/manifest.json`.
+- Ikona źródłowa znajduje się w `src/icons/icon.svg`. PNG w rozmiarach 16, 32, 48, 96 i 128 px
+  odtwarza `python3 scripts/render-icons.py` (wymagany Pillow). Gotowe PNG są w repozytorium,
+  więc zwykłe budowanie nie wymaga Pythona ani Pillow.
