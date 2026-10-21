@@ -181,6 +181,25 @@ stan wersji w panelu AMO przed ponowieniem.
 Każda wersja musi mieć numer wyższy niż poprzednia wersja w AMO. Publikacja paczki
 Chrome i przesyłanie do Chrome Web Store nie są częścią tego workflow.
 
+### Podpisany XPI w GitHub Release
+
+Workflow `Sync signed Firefox XPI` (`.github/workflows/sync-signed-xpi.yml`)
+sprawdza wydania co godzinę. Gdy publiczna wersja w AMO zostanie zatwierdzona,
+pobiera jej podpisany plik, weryfikuje SHA-256 z API AMO i dołącza
+`gitlab-mr-checker-X.Y.Z-firefox.xpi` do GitHub Release `vX.Y.Z`.
+ZIP pozostaje obok XPI. Wersje oczekujące na recenzję są pomijane i sprawdzane
+ponownie przy kolejnym uruchomieniu; istniejące XPI nie są zastępowane.
+
+Można też wybrać **Actions → Sync signed Firefox XPI → Run workflow**.
+Workflow i skrypt muszą znajdować się na domyślnej gałęzi repozytorium, z której
+GitHub uruchamia harmonogram; ręczne uruchomienie także korzysta z tej gałęzi.
+Harmonogram GitHub może być opóźniony. Sprawdzane są wszystkie stabilne wydania
+z paczką Firefox, więc starsza wersja zatwierdzona później również otrzyma XPI.
+Wydania robocze i prerelease są pomijane.
+
+Ten workflow nie zgłasza nowych wersji do AMO. Używa publicznego API AMO oraz
+automatycznego `GITHUB_TOKEN` do dodawania pliku w GitHub; nie wymaga nowych sekretów.
+
 ## Architektura
 
 ```text
