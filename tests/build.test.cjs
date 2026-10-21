@@ -6,21 +6,27 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const script = path.join(root, 'scripts/build.cjs');
+const sharedFiles = ['guard.js', 'merge-guard.js', 'dialog.js', 'settings.js', 'background.js', 'options.js', 'options.html', 'options.css', 'icons/icon-48.png'];
+
+// Every browser build ships unchanged shared code and leaves development files out.
+function assertSharedAssets(output) {
+  for (const file of sharedFiles) {
+    assert.deepEqual(readFileSync(path.join(output, file)), readFileSync(path.join(root, 'src', file)));
+  }
+  for (const file of ['tests', 'docs', 'scripts', 'README.md']) {
+    assert.equal(readdirSync(output).includes(file), false);
+  }
+}
 
 test('Firefox build contains runtime assets and the original browser manifest', () => {
   execFileSync(process.execPath, [script, 'firefox'], { cwd: root });
   const output = path.join(root, 'dist/firefox');
   const manifest = JSON.parse(readFileSync(path.join(output, 'manifest.json')));
   assert.deepEqual(manifest, JSON.parse(readFileSync(path.join(root, 'browsers/firefox/manifest.json'))));
-  for (const file of ['guard.js', 'merge-guard.js', 'dialog.js', 'settings.js', 'background.js', 'options.js', 'options.html', 'options.css', 'icons/icon-48.png']) {
-    assert.deepEqual(readFileSync(path.join(output, file)), readFileSync(path.join(root, 'src', file)));
-  }
   for (const file of manifest.background.scripts) readFileSync(path.join(output, file));
   readFileSync(path.join(output, manifest.options_ui.page));
   for (const file of Object.values(manifest.icons)) readFileSync(path.join(output, file));
-  for (const file of ['tests', 'docs', 'scripts', 'README.md']) {
-    assert.equal(readdirSync(output).includes(file), false);
-  }
+  assertSharedAssets(output);
 });
 
 test('Chrome build contains shared assets, the MV3 manifest and its service worker', () => {
@@ -29,9 +35,6 @@ test('Chrome build contains shared assets, the MV3 manifest and its service work
   const manifest = JSON.parse(readFileSync(path.join(output, 'manifest.json')));
   assert.deepEqual(manifest, JSON.parse(readFileSync(path.join(root, 'browsers/chrome/manifest.json'))));
   assert.equal(manifest.manifest_version, 3);
-  for (const file of ['guard.js', 'merge-guard.js', 'dialog.js', 'settings.js', 'background.js', 'options.js', 'options.html', 'options.css', 'icons/icon-48.png']) {
-    assert.deepEqual(readFileSync(path.join(output, file)), readFileSync(path.join(root, 'src', file)));
-  }
   const worker = readFileSync(path.join(output, manifest.background.service_worker), 'utf8');
   const imported = worker.match(/importScripts\(([^)]*)\)/)[1].match(/'[^']+'/g).map(name => name.slice(1, -1));
   assert.deepEqual(imported, ['settings.js', 'background.js']);
@@ -40,9 +43,7 @@ test('Chrome build contains shared assets, the MV3 manifest and its service work
   for (const file of [...Object.values(manifest.icons), ...Object.values(manifest.action.default_icon)]) {
     readFileSync(path.join(output, file));
   }
-  for (const file of ['tests', 'docs', 'scripts', 'README.md']) {
-    assert.equal(readdirSync(output).includes(file), false);
-  }
+  assertSharedAssets(output);
 });
 
 test('Firefox build does not ship Chrome-only files', () => {

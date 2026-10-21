@@ -3,6 +3,14 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 
+// A fresh Chrome registration as an earlier session would have persisted it.
+function persistedGuard(overrides = {}) {
+	return {
+		id: 'mr-guard', matches: ['https://gitlab.example.com/*'],
+		js: ['dialog.js', 'guard.js', 'merge-guard.js'], runAt: 'document_start', ...overrides,
+	};
+}
+
 async function setup(origin, permitted = true, { chrome = false, registered = [] } = {}) {
 	const listeners = {};
 	const state = { origin, permitted, registrations: [], removed: 0, opened: 0, registered: [...registered] };
@@ -124,25 +132,20 @@ test('Chrome refresh keeps an identical registration instead of re-registering',
 });
 
 test('Chrome service worker start keeps protection persisted by an earlier session', async () => {
-	const persisted = { id: 'mr-guard', matches: ['https://gitlab.example.com/*'],
-		js: ['dialog.js', 'guard.js', 'merge-guard.js'], runAt: 'document_start' };
-	const { state } = await setup('https://gitlab.example.com', true, { chrome: true, registered: [persisted] });
+	const { state } = await setup('https://gitlab.example.com', true, { chrome: true, registered: [persistedGuard()] });
 	assert.equal(state.removed, 0);
-	assert.deepEqual(state.registered, [persisted]);
+	assert.deepEqual(state.registered, [persistedGuard()]);
 });
 
 test('Chrome replaces a persisted registration with outdated scripts', async () => {
-	const outdated = { id: 'mr-guard', matches: ['https://gitlab.example.com/*'],
-		js: ['guard.js'], runAt: 'document_start' };
+	const outdated = persistedGuard({ js: ['guard.js'] });
 	const { state } = await setup('https://gitlab.example.com', true, { chrome: true, registered: [outdated] });
 	assert.equal(state.removed, 1);
 	assert.deepEqual(Array.from(state.registered[0].js), ['dialog.js', 'guard.js', 'merge-guard.js']);
 });
 
 test('Chrome removes persisted protection when no address is saved', async () => {
-	const persisted = { id: 'mr-guard', matches: ['https://gitlab.example.com/*'],
-		js: ['dialog.js', 'guard.js', 'merge-guard.js'], runAt: 'document_start' };
-	const { state } = await setup(undefined, true, { chrome: true, registered: [persisted] });
+	const { state } = await setup(undefined, true, { chrome: true, registered: [persistedGuard()] });
 	assert.equal(state.registered.length, 0);
 });
 
