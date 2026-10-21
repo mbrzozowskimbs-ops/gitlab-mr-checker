@@ -1,15 +1,14 @@
-# Chrome — planowana obsługa
+# Chrome i przeglądarki Chromium
 
-Ten katalog rezerwuje miejsce na konfigurację Chrome. Nie zawiera jeszcze
-manifestu ani działającej wersji rozszerzenia dla tej przeglądarki.
+Konfiguracja dla Chrome, Brave i innych przeglądarek opartych na Chromium (wersja 108+).
+Instalację opisuje główny `README.md`. Ten plik nie trafia do paczki.
 
-Wspólny kod pozostaje w `src/`. Przy dodawaniu obsługi Chrome należy przygotować:
+- `manifest.json` — Manifest V3: `scripting` do rejestracji ochrony, `optional_host_permissions`
+  zamiast opcjonalnych uprawnień do domen, `action` zamiast `browser_action`.
+- `service-worker.js` — Chrome przyjmuje jeden plik tła, więc ładuje wspólne
+  `settings.js` i `background.js` w tej samej kolejności co Firefox.
 
-- manifest dla Chrome;
-- obsługę tła i rejestracji skryptów zamiast obecnego `browser.contentScripts.register`;
-- zgodność wywołań `browser.*`, obsługi uprawnień i otwierania ustawień;
-- rozszerzenie `scripts/build.cjs` o cel `chrome`;
-- testy konfiguracji, odtwarzania ochrony i działania na testowym MR w Chrome.
-
-Nie należy kopiować całej logiki dodatku do osobnej wersji. Różnice API powinny
-być odseparowane od wspólnej logiki sprawdzania MR.
+Wspólny kod pozostaje w `src/`. Różnice API są w `src/background.js` (rejestracja
+przez `scripting.registerContentScripts` zamiast `contentScripts.register`) oraz w `extensionApi`
+z `src/settings.js` (`chrome` zamiast `browser`). Logika sprawdzania MR i okno potwierdzenia
+są wspólne — nie kopiuj ich do osobnej wersji.

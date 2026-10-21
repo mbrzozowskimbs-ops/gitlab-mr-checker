@@ -1,5 +1,8 @@
 'use strict';
 
+// Firefox exposes promise-based `browser`; Chrome MV3 returns promises from `chrome`.
+const extensionApi = globalThis.browser ?? globalThis.chrome;
+
 function gitlabOrigin(value) {
 	let url;
 	try {
