@@ -1,0 +1,81 @@
+name: Firefox release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Require release commit on main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! git merge-base --is-ancestor "$RELEASE_TAG" origin/main; then
+            echo "Release tag $RELEASE_TAG does not point to a commit merged into main."
+            exit 1
+          fi
+
+      - name: Check Firefox release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node -e "
+            const fs = require('node:fs');
+            const tag = process.env.RELEASE_TAG;
+            const pom = fs.readFileSync('pom.xml', 'utf8').match(/<version>([^<]+)<\\/version>/)?.[1];
+            const firefox = JSON.parse(fs.readFileSync('browsers/firefox/manifest.json', 'utf8')).version;
+            if (!/^v\\d+\\.\\d+\\.\\d+$/.test(tag)) throw new Error('Tag must look like vX.Y.Z');
+            if (pom !== tag.slice(1) || firefox !== tag.slice(1)) {
+              throw new Error('Tag and versions in pom.xml and Firefox manifest must match');
+            }
+          "
+
+      - name: Run tests
+        run: node --test tests/*.test.cjs
+
+      - name: Build Firefox package
+        run: |
+          node scripts/build.cjs firefox
+          mkdir -p target
+          (cd dist/firefox && zip -qr "../../target/gitlab-mr-checker-${GITHUB_REF_NAME#v}-firefox.zip" .)
+
+      - name: Submit version to Firefox Add-ons
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          if [ -z "$AMO_JWT_ISSUER" ] || [ -z "$AMO_JWT_SECRET" ]; then
+            echo "AMO_JWT_ISSUER and AMO_JWT_SECRET repository secrets are required."
+            exit 1
+          fi
+          npx --yes web-ext@10 sign \
+            --source-dir dist/firefox \
+            --artifacts-dir target/amo \
+            --channel listed \
+            --api-key "$AMO_JWT_ISSUER" \
+            --api-secret "$AMO_JWT_SECRET"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          "target/gitlab-mr-checker-${RELEASE_TAG#v}-firefox.zip"
+          --generate-notes

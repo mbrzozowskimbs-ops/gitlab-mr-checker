@@ -146,6 +146,31 @@ W przeglądarkach Chromium instalacja bez trybu dewelopera wymaga publikacji w C
 (także jako niepubliczna); do sklepu przesyła się archiwum `-chrome.zip`, które sklep sam podpisuje.
 Brave i inne przeglądarki Chromium instalują dodatek stamtąd bez osobnej publikacji.
 
+### Automatyczne wydania
+
+Workflow GitHub Actions w `.github/workflows/release.yml` uruchamia się po wypchnięciu
+taga `vX.Y.Z`. Sprawdza, czy commit taga jest osiągalny z `main`, weryfikuje zgodność
+taga z wersją w `pom.xml` i manifeście Firefoksa, uruchamia testy i buduje paczkę
+Firefox. Następnie przesyła wersję do istniejącego dodatku AMO, a ZIP dołącza do
+GitHub Release. Recenzja i udostępnienie wersji zależą od AMO. Workflow korzysta
+z kanału `listed`.
+
+W ustawieniach repozytorium GitHub dodaj sekrety Actions `AMO_JWT_ISSUER`
+i `AMO_JWT_SECRET` z [poświadczeń API AMO](https://addons.mozilla.org/developers/addon/api/key/).
+Sekrety nie powinny trafiać do plików repozytorium.
+
+Przed wydaniem ustaw nowy numer `X.Y.Z` w `pom.xml` i
+`browsers/firefox/manifest.json`, zatwierdź i zmerguj zmiany do `main`,
+a następnie utwórz i wypchnij tag wskazujący ten commit, np.:
+
+```sh
+git tag v1.6.0
+git push origin v1.6.0
+```
+
+Każda wersja musi mieć numer wyższy niż poprzednia wersja w AMO. Publikacja paczki
+Chrome i przesyłanie do Chrome Web Store nie są częścią tego workflow.
+
 ## Architektura
 
 ```text
