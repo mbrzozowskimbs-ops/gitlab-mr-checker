@@ -69,9 +69,6 @@ oraz scalenie commitów (squash). Dodatek odczytuje stan checkboxów i nie zmien
 Początkowy fokus jest na przycisku anulowania. Zmiana opcji podczas wyświetlania
 pytania powoduje ponowną kontrolę przed wznowieniem akcji.
 
-Podglądy na formularzu testowym: [okno potwierdzenia](docs/dialog-preview.png)
-i [ustawienia](docs/options-preview.png).
-
 ## Konfiguracja i prywatność
 
 - Podaj sam adres HTTPS serwera, bez ścieżki projektu, danych logowania, parametrów
@@ -146,6 +143,50 @@ W przeglądarkach Chromium instalacja bez trybu dewelopera wymaga publikacji w C
 (także jako niepubliczna); do sklepu przesyła się archiwum `-chrome.zip`, które sklep sam podpisuje.
 Brave i inne przeglądarki Chromium instalują dodatek stamtąd bez osobnej publikacji.
 
+### Automatyczne wydania
+
+Workflow GitHub Actions w `.github/workflows/release.yml` uruchamia się po zmianie
+`main`, np. po merge PR. Najpierw uruchamia testy, które sprawdzają też zgodność numerów
+wersji w `pom.xml` i manifestach. O tym, czy wersja jest nowa, decyduje AMO: workflow
+pyta API AMO z uwierzytelnieniem, bo tylko właściciel widzi wersje niepubliczne.
+
+Dla wersji nieobecnej w AMO workflow buduje paczkę Firefox i podpisuje ją w AMO jako
+wersję niepubliczną (kanał `unlisted`), więc dodatek nie pojawia się na publicznej liście.
+Takie wersje przechodzą tylko automatyczną weryfikację, dlatego workflow czeka na podpis
+(maksymalnie 60 minut) i pobiera podpisany plik. Następnie tworzy GitHub Release oraz tag
+`vX.Y.Z` wskazujący dokładnie commit uruchomienia i dołącza do wydania
+`gitlab-mr-checker-X.Y.Z-firefox.zip` oraz podpisany `gitlab-mr-checker-X.Y.Z-firefox.xpi`.
+Wersji już obecnej w AMO workflow nie przesyła ponownie. Jeśli jej GitHub Release
+nie istnieje albo nie ma ZIP-a i XPI, workflow kończy się sukcesem z ostrzeżeniem
+o niedokończonym wydaniu; dokończ je według poniższych kroków.
+
+W ustawieniach repozytorium GitHub dodaj sekrety Actions `AMO_JWT_ISSUER`
+i `AMO_JWT_SECRET` z [poświadczeń API AMO](https://addons.mozilla.org/developers/addon/api/key/).
+Sekrety nie powinny trafiać do plików repozytorium. Są potrzebne także do sprawdzenia
+wersji w AMO, więc bez nich workflow kończy się błędem po testach.
+
+Przed wydaniem ustaw ten sam nowy numer `X.Y.Z` w `pom.xml`,
+`browsers/firefox/manifest.json` i `browsers/chrome/manifest.json` (testy wymagają
+zgodności wszystkich trzech wersji), zatwierdź i zmerguj zmiany do `main`.
+Nie trzeba ręcznie tworzyć ani wypychać taga. Ustaw ochronę `main`, jeśli zmiany mają
+trafiać do niej wyłącznie przez PR: workflow reaguje na każdy push do `main`.
+
+Odzyskiwanie po błędzie:
+
+- Zawiodło tworzenie GitHub Release: wybierz w GitHub Actions **Re-run failed jobs**.
+  Zadanie użyje ZIP-a i XPI zapisanych jako artefakt workflow.
+- Zawiodło podpisanie po przesłaniu wersji (np. limit 60 minut, gdy AMO skieruje wersję
+  do ręcznej weryfikacji): nie ponawiaj, bo AMO odrzuci ten sam numer. ZIP jest zapisany
+  jako artefakt `firefox-package` tego uruchomienia jeszcze przed wysłaniem do AMO.
+  Po podpisaniu pobierz XPI z panelu AMO i utwórz wydanie ręcznie, np.:
+
+```sh
+gh release create v1.6.0 gitlab-mr-checker-1.6.0-firefox.zip gitlab-mr-checker-1.6.0-firefox.xpi --target <commit>
+```
+
+Każda wersja musi mieć numer wyższy niż poprzednia wersja w AMO. Publikacja paczki
+Chrome i przesyłanie do Chrome Web Store nie są częścią tego workflow.
+
 ## Architektura
 
 ```text
@@ -154,7 +195,6 @@ browsers/firefox/     manifest Firefoksa (Manifest V2)
 browsers/chrome/      manifest Chromium (Manifest V3) i service worker
 scripts/              budowanie, konfiguracja ZIP-a i generowanie ikon
 tests/                testy Node.js
-docs/                 dokumentacja i podglądy
 dist/                 wygenerowane pliki rozszerzenia (pomijane w Git)
 target/               wyniki Mavena, w tym ZIP (pomijane w Git)
 ```
