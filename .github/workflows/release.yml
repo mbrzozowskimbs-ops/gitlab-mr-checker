@@ -2,122 +2,125 @@ name: Firefox release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - main
 
 permissions:
   contents: read
 
+concurrency:
+  group: firefox-release-main
+  cancel-in-progress: false
+
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Require release commit on main
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          if ! git merge-base --is-ancestor "$RELEASE_TAG" origin/main; then
-            echo "Release tag $RELEASE_TAG does not point to a commit merged into main."
-            exit 1
-          fi
-
-      - name: Check Firefox release version
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          node -e "
-            const fs = require('node:fs');
-            const tag = process.env.RELEASE_TAG;
-            const pom = fs.readFileSync('pom.xml', 'utf8').match(/<version>([^<]+)<\\/version>/)?.[1];
-            const firefox = JSON.parse(fs.readFileSync('browsers/firefox/manifest.json', 'utf8')).version;
-            if (!/^v\\d+\\.\\d+\\.\\d+$/.test(tag)) throw new Error('Tag must look like vX.Y.Z');
-            if (pom !== tag.slice(1) || firefox !== tag.slice(1)) {
-              throw new Error('Tag and versions in pom.xml and Firefox manifest must match');
-            }
-          "
-
       - name: Run tests
         run: node --test tests/*.test.cjs
+
+      - name: Check Firefox release version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: node scripts/prepare-release.cjs
+
+  sign:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check existing tag target
+        run: |
+          # The peeled ref (^{}) of an annotated tag sorts last and names its commit.
+          tag_commit=$(git ls-remote origin "refs/tags/v$VERSION" "refs/tags/v$VERSION^{}" | sort -k2 | tail -n1 | cut -f1)
+          if [ -n "$tag_commit" ] && [ "$tag_commit" != "$GITHUB_SHA" ]; then
+            echo "Existing tag v$VERSION points to another commit."
+            exit 1
+          fi
 
       - name: Build Firefox package
         run: |
           node scripts/build.cjs firefox
           mkdir -p target
-          (cd dist/firefox && zip -qr "../../target/gitlab-mr-checker-${GITHUB_REF_NAME#v}-firefox.zip" .)
+          (cd dist/firefox && zip -qr "../../target/gitlab-mr-checker-$VERSION-firefox.zip" .)
 
+      # Stored before contacting AMO, so a failed signing still leaves the ZIP for manual recovery.
       - name: Store Firefox package
         uses: actions/upload-artifact@v4
         with:
           name: firefox-package
-          path: target/*-firefox.zip
+          path: target/gitlab-mr-checker-*-firefox.zip
           if-no-files-found: error
 
-  submit-amo:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Download Firefox package
-        uses: actions/download-artifact@v4
-        with:
-          name: firefox-package
-          path: target
-
-      - name: Extract Firefox package
-        run: unzip -q target/*-firefox.zip -d dist/firefox
-
-      - name: Submit version to Firefox Add-ons
+      # Unlisted versions get only automated review, so waiting for the signed XPI usually takes minutes.
+      - name: Sign unlisted version in Firefox Add-ons
         env:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
-          if [ -z "$AMO_JWT_ISSUER" ] || [ -z "$AMO_JWT_SECRET" ]; then
-            echo "AMO_JWT_ISSUER and AMO_JWT_SECRET repository secrets are required."
-            exit 1
-          fi
           npx --yes web-ext@10 sign \
             --source-dir dist/firefox \
             --artifacts-dir target/amo \
-            --channel listed \
-            --approval-timeout 0 \
+            --channel unlisted \
+            --approval-timeout 3600000 \
             --api-key "$AMO_JWT_ISSUER" \
             --api-secret "$AMO_JWT_SECRET"
+          mv target/amo/*.xpi "target/gitlab-mr-checker-$VERSION-firefox.xpi"
+
+      - name: Store signed XPI
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-xpi
+          path: target/gitlab-mr-checker-*-firefox.xpi
+          if-no-files-found: error
 
   github-release:
-    needs: [build, submit-amo]
+    needs: [check, sign]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download Firefox package
+      - name: Download Firefox package and signed XPI
         uses: actions/download-artifact@v4
         with:
-          name: firefox-package
+          pattern: firefox-*
+          merge-multiple: true
           path: target
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
-          package="target/gitlab-mr-checker-${RELEASE_TAG#v}-firefox.zip"
-          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$package" --clobber
+          files=("target/gitlab-mr-checker-$VERSION-firefox.zip" "target/gitlab-mr-checker-$VERSION-firefox.xpi")
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            gh release upload "v$VERSION" "${files[@]}" --clobber
           else
-            gh release create "$RELEASE_TAG" "$package" --verify-tag --generate-notes
+            gh release create "v$VERSION" "${files[@]}" --target "$GITHUB_SHA" --generate-notes
           fi
