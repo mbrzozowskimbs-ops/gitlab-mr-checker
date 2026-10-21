@@ -6,10 +6,10 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -55,6 +55,31 @@ jobs:
           mkdir -p target
           (cd dist/firefox && zip -qr "../../target/gitlab-mr-checker-${GITHUB_REF_NAME#v}-firefox.zip" .)
 
+      - name: Store Firefox package
+        uses: actions/upload-artifact@v4
+        with:
+          name: firefox-package
+          path: target/*-firefox.zip
+          if-no-files-found: error
+
+  submit-amo:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download Firefox package
+        uses: actions/download-artifact@v4
+        with:
+          name: firefox-package
+          path: target
+
+      - name: Extract Firefox package
+        run: unzip -q target/*-firefox.zip -d dist/firefox
+
       - name: Submit version to Firefox Add-ons
         env:
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
@@ -68,14 +93,31 @@ jobs:
             --source-dir dist/firefox \
             --artifacts-dir target/amo \
             --channel listed \
+            --approval-timeout 0 \
             --api-key "$AMO_JWT_ISSUER" \
             --api-secret "$AMO_JWT_SECRET"
+
+  github-release:
+    needs: [build, submit-amo]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Firefox package
+        uses: actions/download-artifact@v4
+        with:
+          name: firefox-package
+          path: target
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: >-
-          gh release create "$RELEASE_TAG"
-          "target/gitlab-mr-checker-${RELEASE_TAG#v}-firefox.zip"
-          --generate-notes
+        run: |
+          package="target/gitlab-mr-checker-${RELEASE_TAG#v}-firefox.zip"
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$package" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$package" --verify-tag --generate-notes
+          fi

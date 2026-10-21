@@ -152,21 +152,31 @@ Workflow GitHub Actions w `.github/workflows/release.yml` uruchamia się po wypc
 taga `vX.Y.Z`. Sprawdza, czy commit taga jest osiągalny z `main`, weryfikuje zgodność
 taga z wersją w `pom.xml` i manifeście Firefoksa, uruchamia testy i buduje paczkę
 Firefox. Następnie przesyła wersję do istniejącego dodatku AMO, a ZIP dołącza do
-GitHub Release. Recenzja i udostępnienie wersji zależą od AMO. Workflow korzysta
-z kanału `listed`.
+GitHub Release. Workflow korzysta z kanału `listed` i kończy przesyłanie po przyjęciu
+zgłoszenia, bez oczekiwania na recenzję. Recenzja i udostępnienie wersji zależą od AMO.
 
 W ustawieniach repozytorium GitHub dodaj sekrety Actions `AMO_JWT_ISSUER`
 i `AMO_JWT_SECRET` z [poświadczeń API AMO](https://addons.mozilla.org/developers/addon/api/key/).
 Sekrety nie powinny trafiać do plików repozytorium.
 
-Przed wydaniem ustaw nowy numer `X.Y.Z` w `pom.xml` i
-`browsers/firefox/manifest.json`, zatwierdź i zmerguj zmiany do `main`,
+Przed wydaniem ustaw ten sam nowy numer `X.Y.Z` w `pom.xml`,
+`browsers/firefox/manifest.json` i `browsers/chrome/manifest.json` (testy wymagają
+zgodności wszystkich trzech wersji), zatwierdź i zmerguj zmiany do `main`,
 a następnie utwórz i wypchnij tag wskazujący ten commit, np.:
 
 ```sh
 git tag v1.6.0
 git push origin v1.6.0
 ```
+
+Budowanie, przesłanie do AMO i tworzenie GitHub Release są osobnymi zadaniami;
+korzystają z tej samej paczki zapisanej jako artefakt workflow. Jeśli po udanym
+przesłaniu do AMO zawiedzie GitHub Release, wybierz w GitHub Actions
+**Re-run failed jobs**, aby ponowić tylko nieudane zadanie. Nie ponawiaj całego
+workflow, bo ponownie zgłosi tę samą wersję do AMO. Ponowienie zadania GitHub Release
+uzupełnia również paczkę w już istniejącym wydaniu. Jeśli samo przesłanie do AMO
+zakończy się błędem po przyjęciu zgłoszenia (np. utrata połączenia), sprawdź najpierw
+stan wersji w panelu AMO przed ponowieniem.
 
 Każda wersja musi mieć numer wyższy niż poprzednia wersja w AMO. Publikacja paczki
 Chrome i przesyłanie do Chrome Web Store nie są częścią tego workflow.
