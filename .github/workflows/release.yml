@@ -59,7 +59,7 @@ jobs:
           # The peeled ref (^{}) of an annotated tag sorts last and names its commit.
           tag_commit=$(git ls-remote origin "refs/tags/v$VERSION" "refs/tags/v$VERSION^{}" | sort -k2 | tail -n1 | cut -f1)
           if [ -n "$tag_commit" ] && [ "$tag_commit" != "$GITHUB_SHA" ]; then
-            echo "Existing tag v$VERSION points to another commit."
+            echo "Istniejący tag v$VERSION wskazuje inny commit."
             exit 1
           fi
 
@@ -79,17 +79,16 @@ jobs:
 
       # Unlisted versions get only automated review, so waiting for the signed XPI usually takes minutes.
       - name: Sign unlisted version in Firefox Add-ons
+        # web-ext reads WEB_EXT_* variables, so the keys stay out of the command line.
         env:
-          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
-          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
-          npx --yes web-ext@10 sign \
+          npx --yes web-ext@10.8.0 sign \
             --source-dir dist/firefox \
             --artifacts-dir target/amo \
             --channel unlisted \
-            --approval-timeout 3600000 \
-            --api-key "$AMO_JWT_ISSUER" \
-            --api-secret "$AMO_JWT_SECRET"
+            --approval-timeout 3600000
           mv target/amo/*.xpi "target/gitlab-mr-checker-$VERSION-firefox.xpi"
 
       - name: Store signed XPI

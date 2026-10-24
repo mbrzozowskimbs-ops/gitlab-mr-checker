@@ -184,6 +184,9 @@ Odzyskiwanie po błędzie:
 gh release create v1.6.0 gitlab-mr-checker-1.6.0-firefox.zip gitlab-mr-checker-1.6.0-firefox.xpi --target <commit>
 ```
 
+Manifest nie ma `gecko.update_url`, więc Firefox nie aktualizuje sam dodatku zainstalowanego
+z XPI. Nową wersję zainstaluj ręcznie, pobierając plik XPI z nowego GitHub Release.
+
 Każda wersja musi mieć numer wyższy niż poprzednia wersja w AMO. Publikacja paczki
 Chrome i przesyłanie do Chrome Web Store nie są częścią tego workflow.
 
